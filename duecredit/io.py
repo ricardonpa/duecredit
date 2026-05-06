@@ -286,6 +286,14 @@ def condition_bibtex(bibtex: str) -> bytes:
     # remove opening letter, e.g. 'S123' -> '123'
     # related issue: https://github.com/brechtm/citeproc-py/issues/74
     bibtex = re.sub(r'(pages\s*=\s*["{])([a-zA-Z])', r"\g<1>", bibtex)
+    # workaround for non-standard month macros returned by doi.org publishers
+    # e.g. 'june', 'sept', 'january' — truncate unquoted bare-word month values
+    # longer than 3 chars to the standard 3-letter BibTeX macro (jan..dec)
+    bibtex = re.sub(
+        r"(month\s*=\s*)([a-zA-Z]{4,})",
+        lambda m: m.group(1) + m.group(2)[:3].lower(),
+        bibtex,
+    )
     return bibtex.encode("utf-8")
 
 

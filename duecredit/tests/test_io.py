@@ -28,6 +28,7 @@ from ..io import (
     PickleOutput,
     TextOutput,
     _is_contained,
+    condition_bibtex,
     format_bibtex,
     get_text_rendering,
     import_doi,
@@ -93,6 +94,44 @@ def test_pickleoutput(tmpdir) -> None:
         # TODO: implement comparison of citations
         assert collector._entries.keys() == collector_loaded._entries.keys()
         os.unlink(tempfile)
+
+
+@pytest.mark.parametrize(
+    "month_in, month_out",
+    [
+        # long-form month names
+        ("january", "jan"),
+        ("february", "feb"),
+        ("march", "mar"),
+        ("april", "apr"),
+        ("june", "jun"),
+        ("july", "jul"),
+        ("august", "aug"),
+        ("september", "sep"),
+        ("october", "oct"),
+        ("november", "nov"),
+        ("december", "dec"),
+        # non-standard abbreviations
+        ("sept", "sep"),
+        # standard 3-letter macros must be left untouched
+        ("jan", "jan"),
+        ("sep", "sep"),
+    ],
+)
+def test_condition_bibtex_month_macros(month_in: str, month_out: str) -> None:
+    """condition_bibtex normalises non-standard month macros to 3-letter form."""
+    bibtex = f"@article{{key, title={{T}}, year={{2024}}, month = {month_in},}}"
+    result = condition_bibtex(bibtex).decode("utf-8")
+    assert f"month = {month_out}" in result, (
+        f"Expected 'month = {month_out}' in conditioned bibtex, got: {result!r}"
+    )
+
+
+def test_condition_bibtex_quoted_month_untouched() -> None:
+    """condition_bibtex must not alter already-quoted month values."""
+    bibtex = "@article{key, title={T}, year={2024}, month = {June},}"
+    result = condition_bibtex(bibtex).decode("utf-8")
+    assert "month = {June}" in result
 
 
 def test_output() -> None:
