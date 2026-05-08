@@ -28,6 +28,7 @@ from ..io import (
     PickleOutput,
     TextOutput,
     _is_contained,
+    condition_bibtex,
     format_bibtex,
     get_text_rendering,
     import_doi,
@@ -93,6 +94,75 @@ def test_pickleoutput(tmpdir) -> None:
         # TODO: implement comparison of citations
         assert collector._entries.keys() == collector_loaded._entries.keys()
         os.unlink(tempfile)
+
+
+@pytest.mark.parametrize(
+    "month_in, month_out",
+    [
+        # long-form month names
+        ("january", "jan"),
+        ("february", "feb"),
+        ("march", "mar"),
+        ("april", "apr"),
+        ("june", "jun"),
+        ("july", "jul"),
+        ("august", "aug"),
+        ("september", "sep"),
+        ("october", "oct"),
+        ("november", "nov"),
+        ("december", "dec"),
+        # non-standard abbreviations
+        ("sept", "sep"),
+        # standard 3-letter macros must be left untouched
+        ("jan", "jan"),
+        ("sep", "sep"),
+    ],
+)
+def test_condition_bibtex_month_macros(month_in: str, month_out: str) -> None:
+    """condition_bibtex normalises non-standard month macros to 3-letter form."""
+    bibtex = f"@article{{key, title={{T}}, year={{2024}}, month = {month_in},}}"
+    result = condition_bibtex(bibtex).decode("utf-8")
+    assert f"month = {month_out}" in result, (
+        f"Expected 'month = {month_out}' in conditioned bibtex, got: {result!r}"
+    )
+
+
+def test_condition_bibtex_quoted_month_untouched() -> None:
+    """condition_bibtex must not alter already-quoted month values."""
+    bibtex = "@article{key, title={T}, year={2024}, month = {June},}"
+    result = condition_bibtex(bibtex).decode("utf-8")
+    assert "month = {June}" in result
+
+
+@pytest.mark.parametrize(
+    "doi, month",
+    [
+        ("10.1016/j.commatsci.2022.111254", "june"),
+        ("10.1038/s42256-023-00716-3", "sept"),
+        ("10.1103/PhysRevX.14.021036", "june"),
+    ],
+)
+def test_doi_month_macro_regression(
+    monkeypatch: MonkeyPatch, doi: str, month: str
+) -> None:
+    """Regression test: DOI rendering must not error on bare non-standard month macros."""
+
+    def _import_doi(_doi: str, sleep: float = 0.5, retries: int = 10) -> str:
+        assert _doi == doi
+        return (
+            "@article{MonthMacroRegression,"
+            "title={Month Macro Regression},"
+            "author={Doe, Jane},"
+            f"month = {month},"
+            "year={2024},"
+            "journal={Journal of Tests}"
+            "}"
+        )
+
+    monkeypatch.setattr(duecredit.io, "import_doi", _import_doi)
+
+    rendered = get_text_rendering(Doi(doi))
+    assert "ERRORED:" not in rendered, f"unexpected rendering error: {rendered}"
 
 
 def test_output() -> None:
